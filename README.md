@@ -47,38 +47,25 @@
 ## Установка
 1. Клонировать репозиторий:
    
-   ```bash
-
-   git clone https://github.com/your_username/ai-skill-matcher.git
-
-   cd ai-skill-matcher
-
-   ```
+```bash
+git clone https://github.com/your_username/ai-skill-matcher.git
+cd ai-skill-matcher
+```
    
 2. Создать и активировать виртуальное окружение:
-   ```bash
-
+```bash
    python -m venv venv
-
    source venv/bin/activate          # для Linux/macOS
-
    venv\Scripts\activate.bat         # для Windows
-
-   ```
+```
    
 3. Установить зависимости:
-
 ```bash
-
    pip install -r requirements.txt
-
 ```
-
 4. Запустить приложение:
 ```bash
-
    streamlit run app.py
-
 ```
 ## Использование
 1. Выбрать профиль для анализа (например, "Аналитик данных")
