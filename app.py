@@ -23,7 +23,7 @@ st.set_page_config(
     page_title="AI Skill Matcher",
     layout="wide",
     initial_sidebar_state="expanded",
-    page_icon="🧠"
+    page_icon="cardano_ada_crypto_icon_264376.ico"
 )
 
 # Очищаем кэш при запуске приложения
@@ -216,8 +216,8 @@ if "history" not in st.session_state:
     st.session_state.history = []
 
 with st.sidebar:
-    st.header("🕘 История анализа")
-    if st.button("🧹 Очистить"):
+    st.header("История анализа")
+    if st.button("Очистить"):
         st.session_state.history = []
     for item in st.session_state.history[::-1]:
         st.write(f"**{item['file']}** — {item['profile']} — {item['score']}%")
@@ -508,12 +508,12 @@ col1, col2 = st.columns([3, 1])
 with col1:
     # Получаем список профилей из импортированного словаря
     profile_names = list(profiles.keys())
-    selected_profile = st.selectbox("📋 Выберите профиль для анализа", profile_names)
+    selected_profile = st.selectbox("Выберите профиль для анализа", profile_names)
     # Получаем данные выбранного профиля
     profile_data = profiles[selected_profile]
 
 with col2:
-    if st.button("✏️ Редактировать матрицу компетенций"):
+    if st.button("Редактировать матрицу компетенций"):
         st.session_state.show_matrix_editor = True
 
 # Редактор матрицы компетенций
@@ -521,7 +521,7 @@ if "show_matrix_editor" not in st.session_state:
     st.session_state.show_matrix_editor = False
 
 if st.session_state.show_matrix_editor:
-    st.markdown("### ✏️ Редактор матрицы компетенций")
+    st.markdown("### Редактор матрицы компетенций")
     
     # Создаем копию текущего профиля для редактирования
     if "edited_profile" not in st.session_state:
@@ -550,7 +550,7 @@ if st.session_state.show_matrix_editor:
     st.markdown("#### Матрица компетенций")
     
     # Кнопка добавления новой строки
-    if st.button("➕ Добавить строку"):
+    if st.button("Добавить строку"):
         st.session_state.matrix_data.append({
             "Категория": "",
             "Навык": "",
@@ -604,7 +604,7 @@ if st.session_state.show_matrix_editor:
     # Кнопки управления
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("💾 Сохранить изменения"):
+        if st.button("Сохранить изменения"):
             # Преобразуем текстовые уровни обратно в числовые
             level_map = {"Базовый": 1, "Средний": 2, "Продвинутый": 3}
             
@@ -630,11 +630,11 @@ if st.session_state.show_matrix_editor:
             st.session_state.show_matrix_editor = False
             del st.session_state.matrix_data
             del st.session_state.edited_profile
-            st.success("✅ Матрица компетенций обновлена")
+            st.success("Матрица компетенций обновлена")
             st.rerun()
     
     with col2:
-        if st.button("❌ Отменить"):
+        if st.button("Отменить"):
             st.session_state.show_matrix_editor = False
             if "matrix_data" in st.session_state:
                 del st.session_state.matrix_data
@@ -642,7 +642,7 @@ if st.session_state.show_matrix_editor:
                 del st.session_state.edited_profile
             st.rerun()
 
-st.title("🧠 AI Skill Matcher — анализ соответствия резюме профилю")
+st.title("AI Skill Matcher — анализ соответствия резюме профилю")
 
 uploaded_files = st.file_uploader(
     "📎 Загрузите одно или несколько резюме",
@@ -855,7 +855,7 @@ def display_single_resume_analysis(results: dict, profile_name: str, show_title:
         """, unsafe_allow_html=True)
     
     # Вкладки для разных типов анализа
-    tabs = st.tabs(["📊 Визуализация", "🎯 Навыки", "📈 Тренды", "💡 Рекомендации"])
+    tabs = st.tabs(["Визуализация", "Навыки", "Тренды", "Рекомендации"])
     
     with tabs[0]:
         col1, col2 = st.columns(2)
@@ -1050,7 +1050,7 @@ def display_single_resume_analysis(results: dict, profile_name: str, show_title:
         col1, col2 = st.columns(2)
         
         with col1:
-            st.write("##### 💪 Сильные стороны")
+            st.write("##### Сильные стороны")
             if strengths:
                 for strength in sorted(strengths, key=lambda x: x['percentage'], reverse=True):
                     st.markdown(f"""
@@ -1070,7 +1070,7 @@ def display_single_resume_analysis(results: dict, profile_name: str, show_title:
                 st.info("Нет категорий с высоким уровнем соответствия")
         
         with col2:
-            st.write("##### 📈 Приоритеты развития")
+            st.write("##### Приоритеты развития")
             if improvements:
                 for improvement in sorted(improvements, key=lambda x: x['percentage']):
                     st.markdown(f"""
@@ -1168,7 +1168,7 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
         df = pd.DataFrame(comparison_data)
         
         # Вкладки для разных видов сравнения
-        compare_tabs = st.tabs(["📊 Общий обзор", "📈 Детальное сравнение", "👤 Профили кандидатов"])
+        compare_tabs = st.tabs(["Общий обзор", "Детальное сравнение", "Профили кандидатов"])
         
         with compare_tabs[0]:
             # Отображаем сводную таблицу
@@ -1260,7 +1260,7 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                 df_analysis = pd.DataFrame(skills_analysis_data)
                 
                 # Создаем вкладки для разных видов визуализации
-                viz_tabs = st.tabs(["📊 Распределение навыков", "📈 Сравнение категорий", "📋 Детальный анализ"])
+                viz_tabs = st.tabs(["Распределение навыков", "Сравнение категорий", "Детальный анализ"])
                 
                 with viz_tabs[0]:
                     st.write("#### Распределение навыков по категориям")
@@ -1525,14 +1525,14 @@ def display_welcome_screen():
     with col1:
         
         with st.container():
-            st.subheader("🎯 Интеллектуальный анализ резюме")
+            st.subheader("Интеллектуальный анализ резюме")
             st.write("""
                 Загрузите одно или несколько резюме для анализа соответствия требуемому профилю.
                 Система проведет детальный анализ навыков и предоставит рекомендации по развитию.
             """)
         
         with st.container():
-            st.subheader("📊 Расширенная аналитика")
+            st.subheader("Расширенная аналитика")
             st.write("""
                 • Детальный анализ навыков по категориям
                 • Визуализация результатов
@@ -1542,7 +1542,7 @@ def display_welcome_screen():
     
     with col2:
         with st.container():
-            st.subheader("✨ Возможности")
+            st.subheader("Возможности")
             st.write("""
                 ✓ Анализ соответствия профилю
                 ✓ Оценка уровня навыков
@@ -1552,7 +1552,7 @@ def display_welcome_screen():
             """)
         
         with st.container():
-            st.subheader("📈 Метрики")
+            st.subheader("Метрики")
             st.write("""
                 • Общий процент соответствия
                 • Уровень кандидата
