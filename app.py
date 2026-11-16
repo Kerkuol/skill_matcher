@@ -13,7 +13,13 @@ from typing import Dict
 import logging
 import plotly.express as px
 import numpy as np
-from profiles import profiles  # Импортируем профили из profiles.py
+from profiles import profiles as default_profiles
+from matrix_storage import load_matrices
+import sqlite3
+from ui_theme import apply_theme, show_plotly, CHART_COLORS
+from matrix_editor import render_matrix_settings
+from navigation import render_navigation, render_landing, render_history, go_to, remember_uploads, clear_resumes, choose_active_matrix
+import hashlib
 import re
 import json
 import traceback
@@ -29,183 +35,9 @@ st.set_page_config(
 # Очищаем кэш при запуске приложения
 st.cache_data.clear()
 
-# Определяем цветовую схему
-COLOR_SCHEME = ['#1f77b4', '#2c5282', '#2b6cb0', '#3182ce']
-
-# Стили для компонентов с поддержкой темной темы
-st.markdown("""
-    <style>
-    /* Общие стили */
-    .main {
-        padding: 0rem 1rem;
-    }
-    .stProgress > div > div > div > div {
-        background-color: var(--primary-color);
-    }
-    .stDataFrame {
-        font-size: 13px;
-    }
-    div[data-testid="stExpander"] {
-        border: none;
-        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    }
-    .stPlotlyChart {
-        padding: 0 !important;
-    }
-    
-    /* Адаптивные стили для светлой/темной темы */
-    [data-testid="stAppViewContainer"] {
-        background-color: var(--background-color);
-        color: var(--text-color);
-    }
-    
-    .metric-card {
-        background-color: var(--card-background-color);
-        padding: 1rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        margin-bottom: 1rem;
-        border: 1px solid var(--border-color);
-    }
-    
-    .metric-value {
-        font-size: 2rem;
-        font-weight: bold;
-        color: var(--primary-color);
-    }
-    
-    .metric-label {
-        color: var(--text-color);
-        font-size: 0.875rem;
-    }
-    
-    h1, h2, h3 {
-        color: var(--header-color);
-        margin-bottom: 0.5rem !important;
-    }
-    
-    .feature-card {
-        background-color: var(--card-background-color);
-        padding: 1rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        margin-bottom: 1rem;
-        border: 1px solid var(--border-color);
-    }
-    
-    .feature-title {
-        color: var(--header-color);
-        font-size: 1.1rem;
-        font-weight: bold;
-        margin-bottom: 0.5rem;
-    }
-    
-    .feature-description {
-        color: var(--text-color);
-        font-size: 0.9rem;
-    }
-    
-    /* Определение переменных для светлой темы */
-    [data-testid="stAppViewContainer"].light {
-        --background-color: white;
-        --text-color: #4a5568;
-        --header-color: #2c5282;
-        --primary-color: #3182ce;
-        --border-color: #e2e8f0;
-        --card-background-color: white;
-    }
-    
-    /* Определение переменных для темной темы */
-    [data-testid="stAppViewContainer"].dark {
-        --background-color: #1a1a1a;
-        --text-color: #e2e8f0;
-        --header-color: #63b3ed;
-        --primary-color: #4299e1;
-        --border-color: #2d3748;
-        --card-background-color: #2d3748;
-    }
-    
-    /* Стили для таблиц */
-    .skills-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 1rem;
-    }
-    
-    .skills-table th {
-        background-color: var(--card-background-color);
-        padding: 0.5rem;
-        text-align: left;
-        color: var(--text-color);
-        border-bottom: 2px solid var(--border-color);
-    }
-    
-    .skills-table td {
-        padding: 0.5rem;
-        border-bottom: 1px solid var(--border-color);
-        color: var(--text-color);
-    }
-    
-    /* Стили для графиков */
-    .js-plotly-plot {
-        background-color: var(--background-color) !important;
-    }
-    
-    .js-plotly-plot .plotly .main-svg {
-        background-color: var(--background-color) !important;
-    }
-
-    /* Стили для информационных блоков */
-    .stAlert {
-        background-color: var(--card-background-color) !important;
-        border-color: var(--border-color) !important;
-    }
-
-    .stAlert .markdown-text-container {
-        color: var(--text-color) !important;
-    }
-
-    /* Стили для кнопок */
-    .stButton > button {
-        background-color: var(--primary-color) !important;
-        color: white !important;
-        border: none !important;
-    }
-
-    .stButton > button:hover {
-        background-color: var(--header-color) !important;
-    }
-
-    /* Стили для селектов и инпутов */
-    .stSelectbox, .stTextInput {
-        background-color: var(--card-background-color) !important;
-        color: var(--text-color) !important;
-    }
-
-    .stSelectbox > div > div > div {
-        color: var(--text-color) !important;
-    }
-
-    /* Стили для вкладок */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: var(--card-background-color) !important;
-    }
-
-    .stTabs [data-baseweb="tab"] {
-        color: var(--text-color) !important;
-    }
-
-    .stTabs [aria-selected="true"] {
-        color: var(--primary-color) !important;
-    }
-    </style>
-    
-    <script>
-        // Определяем текущую тему
-        const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        document.querySelector('[data-testid="stAppViewContainer"]').classList.add(theme);
-    </script>
-""", unsafe_allow_html=True)
+# Оформление из локальных ресурсов; без JavaScript и внешней сборки.
+COLOR_SCHEME = CHART_COLORS
+apply_theme()
 
 # Инициализация состояния
 if 'theme' not in st.session_state:
@@ -214,13 +46,6 @@ if 'theme' not in st.session_state:
 # История
 if "history" not in st.session_state:
     st.session_state.history = []
-
-with st.sidebar:
-    st.header("История анализа")
-    if st.button("Очистить"):
-        st.session_state.history = []
-    for item in st.session_state.history[::-1]:
-        st.write(f"**{item['file']}** — {item['profile']} — {item['score']}%")
 
 # Инициализация состояния аналитики
 if "analytics_data" not in st.session_state:
@@ -252,8 +77,6 @@ def init_models():
     
     return ner_model, embedding_model
 
-# Инициализируем модели при запуске
-ner_model, embedding_model = init_models()
 
 def normalize_skill_name(skill_name: str) -> str:
     """Нормализует название навыка для лучшего сопоставления."""
@@ -503,153 +326,6 @@ def get_course_recommendations(skill: str, level: str):
     """Кэширование рекомендаций курсов."""
     return recommend_courses([skill], level)
 
-# Выбор профиля и редактор матрицы компетенций
-col1, col2 = st.columns([3, 1])
-with col1:
-    # Получаем список профилей из импортированного словаря
-    profile_names = list(profiles.keys())
-    selected_profile = st.selectbox("Выберите профиль для анализа", profile_names)
-    # Получаем данные выбранного профиля
-    profile_data = profiles[selected_profile]
-
-with col2:
-    if st.button("Редактировать матрицу компетенций"):
-        st.session_state.show_matrix_editor = True
-
-# Редактор матрицы компетенций
-if "show_matrix_editor" not in st.session_state:
-    st.session_state.show_matrix_editor = False
-
-if st.session_state.show_matrix_editor:
-    st.markdown("### Редактор матрицы компетенций")
-    
-    # Создаем копию текущего профиля для редактирования
-    if "edited_profile" not in st.session_state:
-        st.session_state.edited_profile = profiles[selected_profile].copy()
-        
-        # Преобразуем структуру профиля в табличный формат
-        matrix_data = []
-        for category_name, category_data in st.session_state.edited_profile["categories"].items():
-            for skill_name, skill_data in category_data.items():
-                matrix_data.append({
-                    "Категория": category_name,
-                    "Навык": skill_name,
-                    "Уровень": skill_data["level"],
-                    "Описание": skill_data.get("description", ""),
-                    "Ключевые слова": ", ".join(skill_data.get("keywords", []))
-                })
-        st.session_state.matrix_data = matrix_data if matrix_data else [{"Категория": "", "Навык": "", "Уровень": 1, "Описание": "", "Ключевые слова": ""}]
-    
-    # Основная информация о профиле
-    profile_description = st.text_area(
-        "Описание профиля",
-        value=st.session_state.edited_profile.get("description", ""),
-        height=100
-    )
-    
-    st.markdown("#### Матрица компетенций")
-    
-    # Кнопка добавления новой строки
-    if st.button("Добавить строку"):
-        st.session_state.matrix_data.append({
-            "Категория": "",
-            "Навык": "",
-            "Уровень": 1,
-            "Описание": "",
-            "Ключевые слова": ""
-        })
-    
-    # Создаем редактируемую таблицу
-    edited_df = pd.DataFrame(st.session_state.matrix_data)
-    
-    # Преобразуем числовые уровни в текстовые перед отображением
-    edited_df["Уровень"] = edited_df["Уровень"].map({1: "Базовый", 2: "Средний", 3: "Продвинутый"})
-    
-    # Редактируемая таблица
-    edited_data = st.data_editor(
-        edited_df,
-        column_config={
-            "Категория": st.column_config.TextColumn(
-                "Категория",
-                help="Название категории навыков",
-                required=True
-            ),
-            "Навык": st.column_config.TextColumn(
-                "Навык",
-                help="Название навыка",
-                required=True
-            ),
-            "Уровень": st.column_config.SelectboxColumn(
-                "Уровень",
-                help="Требуемый уровень владения",
-                options=["Базовый", "Средний", "Продвинутый"],
-                required=True
-            ),
-            "Описание": st.column_config.TextColumn(
-                "Описание",
-                help="Описание навыка",
-                width="large"
-            ),
-            "Ключевые слова": st.column_config.TextColumn(
-                "Ключевые слова",
-                help="Ключевые слова через запятую",
-                width="large"
-            )
-        },
-        num_rows="dynamic",
-        use_container_width=True,
-        hide_index=True
-    )
-    
-    # Кнопки управления
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Сохранить изменения"):
-            # Преобразуем текстовые уровни обратно в числовые
-            level_map = {"Базовый": 1, "Средний": 2, "Продвинутый": 3}
-            
-            # Преобразуем таблицу обратно в структуру профиля
-            new_categories = {}
-            for _, row in edited_data.iterrows():
-                if row["Категория"] and row["Навык"]:  # Проверяем, что обязательные поля заполнены
-                    category = row["Категория"]
-                    if category not in new_categories:
-                        new_categories[category] = {}
-                    
-                    new_categories[category][row["Навык"]] = {
-                        "level": level_map[row["Уровень"]],
-                        "description": row["Описание"],
-                        "keywords": [k.strip() for k in row["Ключевые слова"].split(",") if k.strip()]
-                    }
-            
-            # Обновляем профиль
-            profiles[selected_profile] = {
-                "description": profile_description,
-                "categories": new_categories
-            }
-            st.session_state.show_matrix_editor = False
-            del st.session_state.matrix_data
-            del st.session_state.edited_profile
-            st.success("Матрица компетенций обновлена")
-            st.rerun()
-    
-    with col2:
-        if st.button("Отменить"):
-            st.session_state.show_matrix_editor = False
-            if "matrix_data" in st.session_state:
-                del st.session_state.matrix_data
-            if "edited_profile" in st.session_state:
-                del st.session_state.edited_profile
-            st.rerun()
-
-st.title("AI Skill Matcher — анализ соответствия резюме профилю")
-
-uploaded_files = st.file_uploader(
-    "Загрузите одно или несколько резюме",
-    type=["pdf", "docx", "txt"],
-    accept_multiple_files=True
-)
-
 def determine_experience_level(total_percentage: float, categories_analysis: dict) -> str:
     """Определяет уровень опыта на основе анализа навыков и их уровней."""
     
@@ -881,7 +557,7 @@ def display_single_resume_analysis(results: dict, profile_name: str, show_title:
                     height=300,
                     title="Распределение навыков"
                 )
-                st.plotly_chart(fig, use_container_width=True, key=f"pie_chart_{resume_id}")
+                show_plotly(fig, use_container_width=True, key=f"pie_chart_{resume_id}")
         
         with col2:
             # Радарная диаграмма
@@ -904,7 +580,7 @@ def display_single_resume_analysis(results: dict, profile_name: str, show_title:
                     height=300,
                     title="Профиль компетенций"
                 )
-                st.plotly_chart(fig, use_container_width=True, key=f"radar_chart_{resume_id}")
+                show_plotly(fig, use_container_width=True, key=f"radar_chart_{resume_id}")
         
         # Добавляем гистограмму распределения навыков
         skills_distribution = []
@@ -932,7 +608,7 @@ def display_single_resume_analysis(results: dict, profile_name: str, show_title:
                 height=400,
                 margin=dict(l=20, r=20, t=40, b=20)
             )
-            st.plotly_chart(fig, use_container_width=True, key=f"distribution_chart_{resume_id}")
+            show_plotly(fig, use_container_width=True, key=f"distribution_chart_{resume_id}")
     
     with tabs[1]:
         skill_tabs = st.tabs(["✓ Подтверждены", "⚠ Требуют развития", "× Отсутствуют"])
@@ -1013,7 +689,7 @@ def display_single_resume_analysis(results: dict, profile_name: str, show_title:
                 height=400,
                 margin=dict(l=20, r=20, t=40, b=20)
             )
-            st.plotly_chart(fig_trends, use_container_width=True, key=f"trends_chart_{resume_id}")
+            show_plotly(fig_trends, use_container_width=True, key=f"trends_chart_{resume_id}")
     
     with tabs[2]:
         st.write("#### Рекомендации по развитию")
@@ -1050,7 +726,7 @@ def display_single_resume_analysis(results: dict, profile_name: str, show_title:
                             <div style="font-size: 1.1rem; font-weight: bold; color: var(--header-color);">
                                 {strength['category']}
                             </div>
-                            <div style="color: #48bb78; font-size: 1.5rem; margin: 0.5rem 0;">
+                            <div style="color: #25714b; font-size: 1.5rem; margin: 0.5rem 0;">
                                 {strength['percentage']}%
                             </div>
                             <div class="metric-label">
@@ -1070,7 +746,7 @@ def display_single_resume_analysis(results: dict, profile_name: str, show_title:
                             <div style="font-size: 1.1rem; font-weight: bold; color: var(--header-color);">
                                 {improvement['category']}
                             </div>
-                            <div style="color: #e53e3e; font-size: 1.5rem; margin: 0.5rem 0;">
+                            <div style="color: #707070; font-size: 1.5rem; margin: 0.5rem 0;">
                                 {improvement['percentage']}%
                             </div>
                             <div class="metric-label">
@@ -1185,7 +861,7 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                 height=400,
                 margin=dict(l=20, r=20, t=40, b=20)
             )
-            st.plotly_chart(fig, use_container_width=True, key="overall_comparison_chart")
+            show_plotly(fig, use_container_width=True, key="overall_comparison_chart")
         
         with compare_tabs[1]:
             # График сравнения по категориям
@@ -1224,7 +900,7 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                         x=1
                     )
                 )
-                st.plotly_chart(fig, use_container_width=True, key="categories_comparison_chart")
+                show_plotly(fig, use_container_width=True, key="categories_comparison_chart")
             
             # Тепловая карта навыков
             skills_analysis_data = []
@@ -1268,7 +944,7 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                             name=f"{candidate} (Подтверждено)",
                             x=df_candidate["Категория"],
                             y=df_candidate["Подтверждено"],
-                            marker_color="#63b3ed",
+                            marker_color="#6ece9d",
                             text=df_candidate["Подтверждено"],
                             textposition="inside",
                             hovertemplate="<b>%{x}</b><br>" +
@@ -1281,7 +957,7 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                             name=f"{candidate} (Развитие)",
                             x=df_candidate["Категория"],
                             y=df_candidate["Требует развития"],
-                            marker_color="#90cdf4",
+                            marker_color="#ffda6e",
                             text=df_candidate["Требует развития"],
                             textposition="inside",
                             hovertemplate="<b>%{x}</b><br>" +
@@ -1294,7 +970,7 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                             name=f"{candidate} (Отсутствует)",
                             x=df_candidate["Категория"],
                             y=df_candidate["Отсутствует"],
-                            marker_color="#2c5282",
+                            marker_color="#707070",
                             text=df_candidate["Отсутствует"],
                             textposition="inside",
                             hovertemplate="<b>%{x}</b><br>" +
@@ -1309,7 +985,7 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                         yaxis_title="Количество навыков",
                         plot_bgcolor='rgba(0,0,0,0)',
                         paper_bgcolor='rgba(0,0,0,0)',
-                        font={'color': '#e2e8f0'},
+                        font={'color': '#000000'},
                         showlegend=True,
                         legend=dict(
                             orientation="h",
@@ -1321,10 +997,10 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                         height=500
                     )
                     
-                    fig_distribution.update_xaxes(showgrid=False, color='#e2e8f0')
-                    fig_distribution.update_yaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)', color='#e2e8f0')
+                    fig_distribution.update_xaxes(showgrid=False, color='#000000')
+                    fig_distribution.update_yaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)', color='#000000')
                     
-                    st.plotly_chart(fig_distribution, use_container_width=True, key="skills_distribution_chart")
+                    show_plotly(fig_distribution, use_container_width=True, key="skills_distribution_chart")
                 
                 with viz_tabs[1]:
                     st.write("#### Сравнение категорий между кандидатами")
@@ -1373,11 +1049,11 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                             radialaxis=dict(
                                 visible=True,
                                 range=[0, 100],
-                                color='#e2e8f0',
+                                color='#000000',
                                 gridcolor='rgba(128,128,128,0.2)'
                             ),
                             angularaxis=dict(
-                                color='#e2e8f0'
+                                color='#000000'
                             ),
                             bgcolor='rgba(0,0,0,0)'
                         ),
@@ -1390,11 +1066,11 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                             x=1
                         ),
                         paper_bgcolor='rgba(0,0,0,0)',
-                        font={'color': '#e2e8f0'},
+                        font={'color': '#000000'},
                         height=500
                     )
                     
-                    st.plotly_chart(fig_radar, use_container_width=True, key="skills_radar_chart")
+                    show_plotly(fig_radar, use_container_width=True, key="skills_radar_chart")
 
                     # Добавляем тепловую карту
                     st.write("#### Тепловая карта соответствия навыков")
@@ -1411,7 +1087,7 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                         z=heatmap_data.values,
                         x=heatmap_data.columns,
                         y=heatmap_data.index,
-                        colorscale='YlOrRd',
+                        colorscale=[[0, '#f8f5ed'], [0.5, '#ffda6e'], [1, '#000000']],
                         text=heatmap_data.values.round(1),
                         texttemplate="%{text}%",
                         textfont={"size": 10},
@@ -1430,10 +1106,10 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                         margin=dict(l=20, r=20, t=40, b=20),
                         plot_bgcolor='rgba(0,0,0,0)',
                         paper_bgcolor='rgba(0,0,0,0)',
-                        font={'color': '#e2e8f0'}
+                        font={'color': '#000000'}
                     )
                     
-                    st.plotly_chart(fig_heatmap, use_container_width=True, key="skills_heatmap")
+                    show_plotly(fig_heatmap, use_container_width=True, key="skills_heatmap")
                 
                 with viz_tabs[2]:
                     st.write("#### Детальный анализ навыков")
@@ -1510,26 +1186,26 @@ def display_comparative_analysis(resumes_data: list, profile_name: str):
                     st.markdown("---")
 
 def display_welcome_screen():
-    """Отображает улучшенный стартовый экран приложения."""
-    
-    col1, col2 = st.columns([2, 1])
-    
+    """Те же возможности и метрики в карточках дизайн-системы."""
+    col1, col2 = st.columns(2)
     with col1:
-        with st.container():
-            st.subheader("Метрики")
-            st.markdown("""
+        st.markdown("""
+            <div class="feature-card">
+                <div class="section-index">01 / РЕЗУЛЬТАТЫ</div>
+                <h3>Метрики</h3>
                 <ul>
                     <li>Общий процент соответствия</li>
                     <li>Уровень кандидата</li>
                     <li>Распределение навыков</li>
                     <li>Профиль компетенций</li>
                 </ul>
-            """, unsafe_allow_html=True)
-    
+            </div>
+        """, unsafe_allow_html=True)
     with col2:
-        with st.container():
-            st.subheader("Возможности")
-            st.markdown("""
+        st.markdown("""
+            <div class="feature-card">
+                <div class="section-index">02 / ИНСТРУМЕНТЫ</div>
+                <h3>Возможности</h3>
                 <ul>
                     <li>Анализ соответствия профилю</li>
                     <li>Оценка уровня навыков</li>
@@ -1537,14 +1213,16 @@ def display_welcome_screen():
                     <li>Сравнение кандидатов</li>
                     <li>Аналитика и метрики</li>
                 </ul>
-            """, unsafe_allow_html=True)
+            </div>
+        """, unsafe_allow_html=True)
+
 
 def display_loader(message: str):
     """Отображает индикатор загрузки."""
     with st.container():
         st.markdown(f"""
             <div style="display: flex; justify-content: center; align-items: center; padding: 2rem;">
-                <div style="color: #2c5282; font-weight: 500;">{message}</div>
+                <div style="color: #000000; font-weight: 500;">{message}</div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -1554,51 +1232,101 @@ def display_progress(current: int, total: int, message: str):
     with st.container():
         st.markdown(f"""
             <div style="text-align: center; margin: 1rem 0;">
-                <div style="color: #2c5282; font-weight: 500; margin-bottom: 0.5rem;">{message}</div>
-                <div style="color: #2c5282; font-weight: 500;">{int(progress * 100)}%</div>
+                <div style="color: #000000; font-weight: 500; margin-bottom: 0.5rem;">{message}</div>
+                <div style="color: #000000; font-weight: 500;">{int(progress * 100)}%</div>
             </div>
         """, unsafe_allow_html=True)
         st.progress(progress)
 
-# Обработка загруженных файлов
-if uploaded_files:
-    total_files = len(uploaded_files)
-    processed_resumes = []
-    
-    for i, f in enumerate(uploaded_files, 1):
-        text = parse_resume(f)
 
-        if text.startswith("["):
-            st.error(f"Ошибка при обработке {f.name}: {text}")
-            continue
+# Screens share the same Streamlit session, but only analysis runs the engine.
+page = render_navigation()
+if page == "home":
+    render_landing()
+elif page == "settings":
+    render_matrix_settings()
+else:
+    st.markdown('<div class="hero-kicker">РАБОЧЕЕ ПРОСТРАНСТВО</div>', unsafe_allow_html=True)
+    st.title("Анализ резюме")
+    st.markdown('<p class="hero-description">Выберите требования вакансии и загрузите одно или несколько резюме. Результаты останутся здесь при переходе в другие разделы.</p>', unsafe_allow_html=True)
+    try:
+        matrix_records = load_matrices(default_profiles)
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        st.error(f"Не удалось прочитать локальные матрицы: {exc}")
+        st.stop()
+    profiles = {record["name"]: record["profile"] for record in matrix_records.values()}
+    if st.session_state.get("active_matrix_id") not in matrix_records:
+        previous = st.session_state.get("matrix_profile_choice")
+        st.session_state.active_matrix_id = next(
+            (key for key, record in matrix_records.items() if record["name"] == previous),
+            next(iter(matrix_records)))
+    st.session_state.analysis_matrix_picker = st.session_state.active_matrix_id
+    selection, settings_link = st.columns([2, 1])
+    with selection:
+        selected_id = st.selectbox(
+            "Активная матрица компетенций", list(matrix_records),
+            format_func=lambda key: matrix_records[key]["name"],
+            key="analysis_matrix_picker", on_change=choose_active_matrix,
+        )
+    with settings_link:
+        st.button("Управление матрицами", on_click=go_to, args=("settings",))
+    selected_record = matrix_records[selected_id]
+    selected_profile = selected_record["name"]
+    if selected_record["profile"].get("description"):
+        st.caption(selected_record["profile"]["description"])
 
-        results = process_resume_text(text)
-        
-        if results:
-            processed_resumes.append({
-                "file_name": f.name,
-                "results": results
-            })
-            
-            # Добавляем в историю
-            st.session_state.history.append({
-                "file": f.name,
-                "profile": selected_profile,
-                "score": results["total_percentage"]
-            })
-            
-            # Обновляем аналитику
-            update_analytics(
-                results["categories_analysis"],
-                results["total_percentage"],
-                results["extracted_skills"]
-            )
-    
-    # Создаем вкладки для разных видов анализа
-    if processed_resumes:
+    upload_key = f"analysis_upload_{st.session_state.get('upload_generation', 0)}"
+    uploaded_files = st.file_uploader(
+        "Загрузите одно или несколько резюме", type=["pdf", "docx", "txt"],
+        accept_multiple_files=True, key=upload_key,
+        on_change=remember_uploads, args=(upload_key,),
+    )
+    files = st.session_state.get("workspace_files", [])
+    if files:
+        st.caption("В работе: " + ", ".join(file["name"] for file in files))
+        if not uploaded_files:
+            st.caption("Ранее загруженные резюме сохранены. Новая загрузка заменит текущий набор файлов.")
+        st.button("Очистить резюме", on_click=clear_resumes)
+        # Cache only orchestration: scoring and result structures are unchanged.
+        signature = hashlib.sha256()
+        signature.update(json.dumps(
+            {"matrix": selected_id, "revision": selected_record["revision"]},
+            sort_keys=True).encode("utf-8"))
+        for file in files:
+            signature.update(json.dumps(file["name"]).encode("utf-8"))
+            signature.update(hashlib.sha256(file["content"]).digest())
+        cache_key = signature.hexdigest()
+        cache = st.session_state.setdefault("workspace_results", {})
+        if cache_key not in cache:
+            processed_resumes, errors = [], []
+            with st.spinner("Анализируем резюме…"):
+                ner_model, embedding_model = init_models()
+                for file in files:
+                    source = BytesIO(file["content"])
+                    source.name = file["name"]
+                    text = parse_resume(source)
+                    if text.startswith("["):
+                        errors.append(f"Ошибка при обработке {file['name']}: {text}")
+                        continue
+                    results = process_resume_text(text)
+                    if results:
+                        processed_resumes.append({"file_name": file["name"], "results": results})
+                        st.session_state.history.append({
+                            "file": file["name"], "profile": selected_profile,
+                            "score": results["total_percentage"],
+                        })
+                        update_analytics(results["categories_analysis"], results["total_percentage"], results["extracted_skills"])
+            cache[cache_key] = {"resumes": processed_resumes, "errors": errors}
+        entry = cache[cache_key]
+        for error in entry["errors"]:
+            st.error(error)
+        processed_resumes = entry["resumes"]
         if len(processed_resumes) == 1:
             display_single_resume_analysis(processed_resumes[0]["results"], selected_profile)
         elif len(processed_resumes) > 1:
             display_comparative_analysis(processed_resumes, selected_profile)
-else:
-    display_welcome_screen() 
+    else:
+        st.markdown('''<div class="analysis-empty"><span class="section-index">ГОТОВО К ЗАГРУЗКЕ</span>
+            <h3>Здесь появится аналитика кандидатов</h3>
+            <p>Добавьте резюме в формате PDF, DOCX или TXT. Для каждого кандидата будут доступны метрики, навыки и рекомендации.</p></div>''', unsafe_allow_html=True)
+    render_history()
