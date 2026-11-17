@@ -46,7 +46,7 @@ class NavigationTests(unittest.TestCase):
 
     def navigate(self, label):
         prepare_selectboxes(self.app)
-        self.app.radio[0].set_value(label).run()
+        next(r for r in self.app.radio if r.label == "Раздел приложения").set_value(label).run()
         self.assertFalse(self.app.exception)
 
     def test_landing_analysis_settings_are_separate(self):
@@ -74,9 +74,8 @@ class NavigationTests(unittest.TestCase):
         self.click("Настроить матрицы")
         self.click("Создать матрицу")
         self.app.text_input[0].set_value("Черновик вакансии")
-        draft = self.app.session_state["matrix_draft"]
-        key = f"matrix_table_{draft['token']}_{draft['generation']}"
-        self.app.session_state[key] = {"edited_rows": {0: {"Категория": "Код", "Навык": "Python"}}, "added_rows": [], "deleted_rows": []}
+        next(field for field in self.app.text_input if field.label == "Название навыка").set_value("Python")
+        next(field for field in self.app.text_input if field.label == "Категория навыка").set_value("Код")
         self.navigate("Главная")
         self.navigate("Настройки")
         self.assertEqual(self.app.text_input[0].value, "Черновик вакансии")

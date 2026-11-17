@@ -17,6 +17,7 @@ from profiles import profiles as default_profiles
 from matrix_storage import load_matrices
 import sqlite3
 from ui_theme import apply_theme, show_plotly, CHART_COLORS
+from analytics_charts import coverage_chart, competency_chart, distribution_chart, STATUS_COLORS, category_label
 from matrix_editor import render_matrix_settings
 from navigation import render_navigation, render_landing, render_history, go_to, remember_uploads, clear_resumes, choose_active_matrix
 import hashlib
@@ -535,81 +536,12 @@ def display_single_resume_analysis(results: dict, profile_name: str, show_title:
     
     with tabs[0]:
         col1, col2 = st.columns(2)
-        
         with col1:
-            # Круговая диаграмма
-            categories = []
-            scores = []
-            for category, data in categories_analysis.items():
-                if data['percentage'] > 0:
-                    categories.append(category)
-                    scores.append(data['percentage'])
-            
-            if categories:
-                fig = go.Figure(data=[go.Pie(
-                    labels=categories,
-                    values=scores,
-                    hole=.3,
-                    marker=dict(colors=COLOR_SCHEME)
-                )])
-                fig.update_layout(
-                    margin=dict(l=20, r=20, t=30, b=20),
-                    height=300,
-                    title="Распределение навыков"
-                )
-                show_plotly(fig, use_container_width=True, key=f"pie_chart_{resume_id}")
-        
+            show_plotly(coverage_chart(categories_analysis), use_container_width=True, key=f"pie_chart_{resume_id}")
         with col2:
-            # Радарная диаграмма
-            if categories:
-                fig = go.Figure()
-                fig.add_trace(go.Scatterpolar(
-                    r=scores,
-                    theta=categories,
-                    fill='toself',
-                    line=dict(color=COLOR_SCHEME[0])
-                ))
-                fig.update_layout(
-                    polar=dict(
-                        radialaxis=dict(
-                            visible=True,
-                            range=[0, 100]
-                        )
-                    ),
-                    margin=dict(l=20, r=20, t=30, b=20),
-                    height=300,
-                    title="Профиль компетенций"
-                )
-                show_plotly(fig, use_container_width=True, key=f"radar_chart_{resume_id}")
-        
-        # Добавляем гистограмму распределения навыков
-        skills_distribution = []
-        for category, data in categories_analysis.items():
-            skills_distribution.extend([
-                {"category": category, "status": "Подтверждены", "count": len(data['matches'])},
-                {"category": category, "status": "Требуют развития", "count": len(data['partials'])},
-                {"category": category, "status": "Отсутствуют", "count": len(data['missing'])}
-            ])
-        
-        df_distribution = pd.DataFrame(skills_distribution)
-        if not df_distribution.empty:
-            fig = px.bar(
-                df_distribution,
-                x="category",
-                y="count",
-                color="status",
-                title="Распределение статусов навыков по категориям",
-                color_discrete_sequence=COLOR_SCHEME,
-                barmode="group"
-            )
-            fig.update_layout(
-                xaxis_title="Категория",
-                yaxis_title="Количество навыков",
-                height=400,
-                margin=dict(l=20, r=20, t=40, b=20)
-            )
-            show_plotly(fig, use_container_width=True, key=f"distribution_chart_{resume_id}")
-    
+            show_plotly(competency_chart(categories_analysis), use_container_width=True, key=f"radar_chart_{resume_id}")
+        show_plotly(distribution_chart(categories_analysis), use_container_width=True, key=f"distribution_chart_{resume_id}")
+
     with tabs[1]:
         skill_tabs = st.tabs(["✓ Подтверждены", "⚠ Требуют развития", "× Отсутствуют"])
         
@@ -673,21 +605,26 @@ def display_single_resume_analysis(results: dict, profile_name: str, show_title:
             df_trends = pd.DataFrame(trends_data)
             # График трендов
             fig_trends = go.Figure()
-            for col in ["Процент подтвержденных", "Процент требующих развития", "Процент отсутствующих"]:
+            for col, status in zip(["Процент подтвержденных", "Процент требующих развития", "Процент отсутствующих"], STATUS_COLORS):
                 fig_trends.add_trace(go.Bar(
-                    name=col,
-                    x=df_trends["Категория"],
+                    name=status,
+                    x=[category_label(name) for name in df_trends["Категория"]],
                     y=df_trends[col],
-                    text=df_trends[col].round(1).astype(str) + "%",
-                    textposition="auto",
+                    customdata=df_trends["Категория"],
+                    marker_color=STATUS_COLORS[status],
+                    text=[f"{value:.0f}%" if value else "" for value in df_trends[col]],
+                    textposition="inside",
+                    textfont=dict(color="#34352e"),
+                    hovertemplate=f"<b>%{{customdata}}</b><br>{status}: %{{y:.1f}}%<extra></extra>",
                 ))
             fig_trends.update_layout(
                 barmode='stack',
-                title="Распределение статусов навыков по категориям (%)",
-                xaxis_title="Категория",
-                yaxis_title="Процент",
-                height=400,
-                margin=dict(l=20, r=20, t=40, b=20)
+                title="Покрытие категорий",
+                xaxis=dict(title=None, showgrid=False),
+                yaxis=dict(title=None, range=[0, 100], ticksuffix="%"),
+                legend=dict(orientation="h", x=0, y=-.25, yanchor="top"),
+                bargap=.62, height=440,
+                margin=dict(l=40, r=24, t=75, b=130)
             )
             show_plotly(fig_trends, use_container_width=True, key=f"trends_chart_{resume_id}")
     
@@ -1299,23 +1236,38 @@ else:
         cache = st.session_state.setdefault("workspace_results", {})
         if cache_key not in cache:
             processed_resumes, errors = [], []
-            with st.spinner("Анализируем резюме…"):
-                ner_model, embedding_model = init_models()
-                for file in files:
-                    source = BytesIO(file["content"])
-                    source.name = file["name"]
-                    text = parse_resume(source)
-                    if text.startswith("["):
-                        errors.append(f"Ошибка при обработке {file['name']}: {text}")
-                        continue
-                    results = process_resume_text(text)
-                    if results:
-                        processed_resumes.append({"file_name": file["name"], "results": results})
-                        st.session_state.history.append({
-                            "file": file["name"], "profile": selected_profile,
-                            "score": results["total_percentage"],
-                        })
-                        update_analytics(results["categories_analysis"], results["total_percentage"], results["extracted_skills"])
+            processing_slot = st.empty()
+            try:
+                with processing_slot.container():
+                    with st.status("Обработка резюме…", expanded=True) as processing:
+                        st.markdown('<div class="processing-banner" role="status"><span class="processing-orbit" aria-hidden="true"></span><div><strong>Готовим аналитику</strong><p>Читаем резюме и сопоставляем навыки с выбранной матрицей.</p></div></div>', unsafe_allow_html=True)
+                        stage = st.empty()
+                        progress = st.progress(0, text="Подготовка моделей")
+                        stage.write("Подготавливаем модели для анализа…")
+                        ner_model, embedding_model = init_models()
+                        for file_index, file in enumerate(files, 1):
+                            stage.write(f"Читаем резюме {file_index} из {len(files)}: {file['name']}")
+                            source = BytesIO(file["content"])
+                            source.name = file["name"]
+                            text = parse_resume(source)
+                            if text.startswith("["):
+                                errors.append(f"Ошибка при обработке {file['name']}: {text}")
+                                progress.progress(file_index / len(files), text=f"Проверено файлов: {file_index} из {len(files)}")
+                                continue
+                            stage.write(f"Сопоставляем навыки с матрицей: {file['name']}")
+                            results = process_resume_text(text)
+                            if results:
+                                processed_resumes.append({"file_name": file["name"], "results": results})
+                                st.session_state.history.append({
+                                    "file": file["name"], "profile": selected_profile,
+                                    "score": results["total_percentage"],
+                                })
+                                update_analytics(results["categories_analysis"], results["total_percentage"], results["extracted_skills"])
+                            progress.progress(file_index / len(files), text=f"Проверено файлов: {file_index} из {len(files)}")
+                        stage.write("Обработка завершена. Результаты доступны ниже.")
+                        processing.update(label=f"Обработано резюме: {len(processed_resumes)} из {len(files)}" if not errors else f"Обработка завершена: успешно {len(processed_resumes)}, с ошибками {len(errors)}", state="complete" if not errors else "error", expanded=bool(errors))
+            finally:
+                processing_slot.empty()
             cache[cache_key] = {"resumes": processed_resumes, "errors": errors}
         entry = cache[cache_key]
         for error in entry["errors"]:

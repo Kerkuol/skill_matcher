@@ -37,6 +37,15 @@ class MatrixEditorTests(unittest.TestCase):
         prepare_selectboxes(self.app)
         next(b for b in self.app.button if b.label == label).click().run()
         self.assertFalse(self.app.exception)
+        if label in ("Создать матрицу", "Копировать матрицу", "Редактировать матрицу компетенций"):
+            self.use_table()
+
+    def use_table(self):
+        mode = next((radio for radio in self.app.radio if radio.label == "Способ редактирования"), None)
+        if mode and mode.value != "Таблица":
+            prepare_selectboxes(self.app)
+            mode.set_value("Таблица").run()
+            self.assertFalse(self.app.exception)
 
     def table_key(self):
         draft = self.app.session_state["matrix_draft"]
@@ -47,7 +56,7 @@ class MatrixEditorTests(unittest.TestCase):
         self.assertTrue(self.app.selectbox[0].disabled)
         self.app.text_input[0].set_value("Backend")
         self.app.session_state[self.table_key()] = {"edited_rows": {0: {"Категория": "Код", "Навык": "Python", "Уровень": "Средний"}}, "added_rows": [], "deleted_rows": []}
-        self.click("Добавить строку")
+        self.click("Добавить компетенцию")
         self.assertEqual(self.app.session_state["matrix_data"][0]["Навык"], "Python")
         self.click("Сохранить изменения")
         self.assertFalse(self.app.error)
@@ -94,3 +103,55 @@ class MatrixEditorTests(unittest.TestCase):
         self.assertEqual(first["Описание"], "Изменённое описание")
         self.assertEqual(first["Уровень"], "Базовый")
         self.assertEqual(saved["revision"], 2)
+
+    def test_default_card_editor_saves_skill(self):
+        prepare_selectboxes(self.app)
+        next(b for b in self.app.button if b.label == "Создать матрицу").click().run()
+        self.assertFalse(self.app.exception)
+        self.assertEqual(next(r for r in self.app.radio if r.label == "Способ редактирования").value, "Карточки")
+        self.app.text_input[0].set_value("Карточная вакансия")
+        next(f for f in self.app.text_input if f.label == "Название навыка").set_value("Python")
+        next(f for f in self.app.text_input if f.label == "Категория навыка").set_value("Разработка")
+        self.click("Сохранить изменения")
+        self.assertFalse(self.app.error)
+        saved = next(m for m in store.load_matrices(profiles).values() if m["name"] == "Карточная вакансия")
+        self.assertEqual(saved["profile"]["categories"]["Разработка"]["Python"]["level"], 1)
+
+    def test_card_table_roundtrip_and_removal(self):
+        prepare_selectboxes(self.app)
+        next(b for b in self.app.button if b.label == "Создать матрицу").click().run()
+        self.app.text_input[0].set_value("Переключение режимов")
+        next(f for f in self.app.text_input if f.label == "Название навыка").set_value("SQL")
+        next(f for f in self.app.text_input if f.label == "Категория навыка").set_value("Данные")
+        self.use_table()
+        self.assertEqual(self.app.session_state["matrix_data"][0]["Навык"], "SQL")
+        self.app.session_state[self.table_key()] = {"edited_rows": {0: {"Уровень": "Средний", "Описание": None, "Ключевые слова": None}}, "added_rows": [], "deleted_rows": []}
+        prepare_selectboxes(self.app)
+        next(r for r in self.app.radio if r.label == "Способ редактирования").set_value("Карточки").run()
+        self.assertFalse(self.app.exception)
+        self.assertEqual(next(s for s in self.app.selectbox if s.label == "Требуемый уровень").value, "Средний")
+        self.assertEqual(next(f for f in self.app.text_input if f.label == "Ключевые слова и синонимы").value, "")
+        self.click("Удалить компетенцию из черновика")
+        self.assertEqual(self.app.session_state["matrix_data"], [])
+        self.click("Сохранить изменения")
+        self.assertTrue(self.app.error)
+        self.click("Отменить")
+        self.assertEqual(len(store.load_matrices(profiles)), len(profiles))
+
+    def test_multiple_skill_cards_remain_independent(self):
+        prepare_selectboxes(self.app)
+        next(b for b in self.app.button if b.label == "Создать матрицу").click().run()
+        self.app.text_input[0].set_value("Два навыка")
+        next(f for f in self.app.text_input if f.label == "Название навыка").set_value("Python")
+        next(f for f in self.app.text_input if f.label == "Категория навыка").set_value("Языки")
+        self.click("Добавить компетенцию")
+        next(f for f in self.app.text_input if f.label == "Название навыка").set_value("SQL")
+        next(f for f in self.app.text_input if f.label == "Категория навыка").set_value("Данные")
+        prepare_selectboxes(self.app)
+        next(s for s in self.app.selectbox if s.label == "Выберите компетенцию").select_index(0).run()
+        self.assertFalse(self.app.exception)
+        self.assertEqual(next(f for f in self.app.text_input if f.label == "Название навыка").value, "Python")
+        self.click("Сохранить изменения")
+        saved = next(m for m in store.load_matrices(profiles).values() if m["name"] == "Два навыка")
+        self.assertIn("Python", saved["profile"]["categories"]["Языки"])
+        self.assertIn("SQL", saved["profile"]["categories"]["Данные"])
