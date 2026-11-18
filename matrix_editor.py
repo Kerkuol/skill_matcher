@@ -37,7 +37,7 @@ def close_matrix_editor():
 def current_matrix_rows():
     draft = st.session_state.matrix_draft
     key = f"matrix_table_{draft['token']}_{draft['generation']}"
-    return editor_rows(st.session_state.matrix_data, st.session_state.get(key, {}))
+    return [dict(row, Уровень=row.get("Уровень") or "Базовый") for row in editor_rows(st.session_state.matrix_data, st.session_state.get(key, {}))]
 
 
 def capture_skill_details():
@@ -136,12 +136,7 @@ def render_bulk_table(draft):
                 help="Название навыка",
                 required=True
             ),
-            "Уровень": st.column_config.SelectboxColumn(
-                "Уровень",
-                help="Требуемый уровень владения",
-                options=["Базовый", "Средний", "Продвинутый"],
-                required=True
-            ),
+            "Уровень": None,
             "Описание": st.column_config.TextColumn(
                 "Описание",
                 help="Описание навыка",
@@ -169,8 +164,8 @@ def matrix_preview(rows):
     for row in filled:
         values = [escape(value) if isinstance(value, str) else "" for value in
                   (row.get("Навык"), row.get("Категория"), row.get("Уровень"), row.get("Описание"))]
-        cells.append(f'<tr><td><strong>{values[0]}</strong></td><td>{values[1]}</td><td><span class="level-pill">{values[2]}</span></td><td>{values[3]}</td></tr>')
-    st.markdown('<div class="matrix-glass-table"><table><caption>Компетенции и требования</caption><thead><tr><th scope="col">Компетенция</th><th scope="col">Категория</th><th scope="col">Уровень</th><th scope="col">Описание</th></tr></thead><tbody>' + "".join(cells) + '</tbody></table></div>', unsafe_allow_html=True)
+        cells.append(f'<tr><td><strong>{values[0]}</strong></td><td>{values[1]}</td><td>{values[3]}</td></tr>')
+    st.markdown('<div class="matrix-glass-table"><table><caption>Компетенции и требования</caption><thead><tr><th scope="col">Компетенция</th><th scope="col">Категория</th><th scope="col">Описание</th></tr></thead><tbody>' + "".join(cells) + '</tbody></table></div>', unsafe_allow_html=True)
 
 
 def render_skill_cards(draft):
@@ -187,11 +182,7 @@ def render_skill_cards(draft):
     row = rows[index]
     prefix = f"skill_{draft['token']}_{draft.get('detail_generation', 0)}_{index}"
     st.markdown('<div class="editor-section-label">КАРТОЧКА КОМПЕТЕНЦИИ · ИЗМЕНЕНИЯ ПОПАДАЮТ В ЧЕРНОВИК</div>', unsafe_allow_html=True)
-    left, right = st.columns([2, 1])
-    with left:
-        st.text_input("Название навыка", value=cell_text(row, "Навык"), key=f"{prefix}_Навык", on_change=capture_skill_details, placeholder="Например, Python")
-    with right:
-        st.selectbox("Требуемый уровень", ["Базовый", "Средний", "Продвинутый"], index=["Базовый", "Средний", "Продвинутый"].index(row.get("Уровень")) if row.get("Уровень") in ("Базовый", "Средний", "Продвинутый") else 0, key=f"{prefix}_Уровень", on_change=capture_skill_details)
+    st.text_input("Название навыка", value=cell_text(row, "Навык"), key=f"{prefix}_Навык", on_change=capture_skill_details, placeholder="Например, Python")
     st.text_input("Категория навыка", value=cell_text(row, "Категория"), key=f"{prefix}_Категория", on_change=capture_skill_details, placeholder="Например, Программирование")
     st.text_area("Что должен уметь кандидат", value=cell_text(row, "Описание"), key=f"{prefix}_Описание", on_change=capture_skill_details, height=100)
     st.text_input("Ключевые слова и синонимы", value=cell_text(row, "Ключевые слова"), key=f"{prefix}_Ключевые слова", on_change=capture_skill_details, help="Через запятую. Например: Python, Python3, pandas")

@@ -1,0 +1,63 @@
+<!doctype html><html lang="ru"><meta charset="utf-8">
+<style>
+*{box-sizing:border-box}body{margin:0;font:13px Inter,Arial,sans-serif;color:#242429;background:transparent}
+#view{position:relative;height:650px;border:1px solid #fff;border-radius:28px;overflow:hidden;background:radial-gradient(ellipse at 85% 10%,#fff0bc80,transparent 65%),#faf8f1;box-shadow:inset 0 0 0 1px #e4dfd1}
+canvas{width:100%;height:100%;touch-action:none;cursor:grab}canvas:active{cursor:grabbing}
+.toolbar{position:absolute;top:18px;left:22px;right:18px;display:flex;justify-content:space-between;align-items:center;gap:10px;pointer-events:none}.toolbar b{font-size:10px;letter-spacing:.15em;color:#696359}.controls{display:flex;align-items:center;gap:7px;pointer-events:auto}
+button,label{border:1px solid #fff;background:#fffdf7dc;border-radius:18px;padding:8px 12px;color:#403d35;box-shadow:0 3px 12px #61542c09;cursor:pointer;font:12px Arial}button:hover{background:#ffe8a1}button:focus-visible,label:focus-within{outline:2px solid #ba8b20;outline-offset:2px}label{display:flex;gap:5px;align-items:center}input{accent-color:#bd8a18}
+.legend{position:absolute;left:22px;top:61px;display:flex;gap:15px;flex-wrap:wrap;font-size:11px;color:#6c665a;pointer-events:none}.legend span{display:flex;align-items:center;gap:5px}.dot{width:8px;height:8px;border-radius:100%;border:1px solid #b8b0a0}
+#detail{position:absolute;bottom:16px;left:18px;right:18px;max-height:115px;overflow:auto;border:1px solid #fff;border-radius:18px;background:#fffdf5e8;backdrop-filter:blur(12px);padding:12px 16px;line-height:1.5;white-space:pre-wrap;font-size:12px;box-shadow:0 8px 24px #63532908}
+@media(max-width:650px){.toolbar b{display:none}.toolbar{justify-content:flex-end}.legend{gap:8px;font-size:10px}button,label{padding:7px 8px}}
+</style>
+<div id="view"><canvas tabindex="0" aria-label="Граф навыков: жёлтые узлы подтверждены, серые не подтверждены. Выберите узел мышью или клавишами со стрелками, Enter раскрывает основания."></canvas>
+<div class="toolbar"><b>СВЯЗИ НАВЫКОВ</b><div class="controls"><label><input id="associations" type="checkbox" checked>Ассоциации</label><button id="reset">Общий вид</button><button id="plus" aria-label="Увеличить">+</button><button id="minus" aria-label="Уменьшить">−</button></div></div>
+<div class="legend"><span><i class="dot" style="background:#ffcc58"></i>Подтверждено</span><span><i class="dot" style="background:#fff3cc;border-color:#bc8b24"></i>Уточнить</span><span><i class="dot" style="background:#9b9993"></i>Не подтверждено</span></div>
+<div id="detail" role="status" aria-live="polite">Выберите навык, чтобы раскрыть основания · Пунктир между навыками — смысловая связь, без баллов · Масштабируйте колёсиком</div></div>
+<script>
+const data=__GRAPH_DATA__;
+const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),box=document.querySelector('#view'),detail=document.querySelector('#detail');
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const groups=data.groups||[],columns=Math.max(1,Math.ceil(Math.sqrt(groups.length*1.5)));
+const five=[[-285,-105],[0,-145],[285,-65],[-155,155],[185,165],[0,40]];
+const anchors=new Map(groups.map((g,i)=>[g.id,groups.length<=6?{x:five[i][0],y:five[i][1]}:{x:(i%columns-(columns-1)/2)*300+(Math.floor(i/columns)%2)*35,y:(Math.floor(i/columns)-Math.ceil(groups.length/columns)/2)*220}]));
+const nodes=data.nodes.map((n,i)=>{const a=anchors.get(n.group)||{x:0,y:0},angle=i*2.39996,r=n.kind==='requirement'?0:48+(i%4)*10;return {...n,x:a.x+Math.cos(angle)*r,y:a.y+Math.sin(angle)*r,vx:0,vy:0,phase:i*1.78}});
+const lookup=new Map(nodes.map(n=>[n.id,n]));
+function connect(items){return(items||[]).map(e=>({...e,a:lookup.get(e.source),b:lookup.get(e.target)})).filter(e=>e.a&&e.b)}
+const edges=connect(data.edges),overview=[...connect(data.overview_edges),...connect(data.relationships)],requirements=nodes.filter(n=>n.kind==='requirement');
+let width=900,height=650,scale=1,panX=0,panY=0,focused=null,hover=null,drag=null,last=null,moved=false,energy=1,frame=0,autoFit=true,time=0,showAssociations=true,keyIndex=0;
+function relevant(){const n=lookup.get(hover||focused);if(!n)return null;const ids=new Set([n.id]);if(n.kind==='requirement'){for(const other of nodes)if(other.groups?.includes(n.group))ids.add(other.id)}else{for(const e of edges)if(e.source===n.id||e.target===n.id){ids.add(e.source);ids.add(e.target)}}return ids}
+function visible(){const near=relevant();return nodes.filter(n=>n.kind==='requirement'||n.kind==='quote'||near?.has(n.id))}
+function screen(n){const float=reduced||n===drag?0:Math.sin(time*.55+n.phase)*1.6;return{x:width/2+panX+(n.x+float)*scale,y:height/2+panY+(n.y+(reduced||n===drag?0:Math.cos(time*.45+n.phase)*1.6))*scale}}
+function color(n){if(n.kind!=='requirement')return n.active?'#b68624':'#9b9589';return n.status==='practical'?'#ffcc58':['declared','participation'].includes(n.status)?'#fff3cc':'#9b9993'}
+function radius(n){return n.kind==='requirement'?Math.max(7,15*scale):Math.max(2.4,3.6*scale)}
+function curve(e){const a=screen(e.a),b=screen(e.b),dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,bend=Math.min(42,len*.16);return{a,b,c:{x:(a.x+b.x)/2-dy/len*bend,y:(a.y+b.y)/2+dx/len*bend}}}
+function point(p,t){const u=1-t;return{x:u*u*p.a.x+2*u*t*p.c.x+t*t*p.b.x,y:u*u*p.a.y+2*u*t*p.c.y+t*t*p.b.y}}
+function draw(){ctx.clearRect(0,0,width,height);const near=relevant(),shown=visible(),ids=new Set(shown.map(n=>n.id)),occupied=[];
+ const links=near?[...overview.filter(e=>!near.has(e.source)),...edges.filter(e=>near.has(e.source)&&near.has(e.target))]:overview;
+ for(const e of links){if(!ids.has(e.source)||!ids.has(e.target)||!showAssociations&&!e.practical)continue;const lit=!near||near.has(e.source)&&near.has(e.target),p=curve(e);ctx.globalAlpha=lit?e.practical?.72:.4:.12;
+ const gradient=ctx.createLinearGradient(p.a.x,p.a.y,p.b.x,p.b.y);gradient.addColorStop(0,'#b49b60');gradient.addColorStop(.5,'#333136');gradient.addColorStop(1,'#c9a650');ctx.strokeStyle=gradient;ctx.lineWidth=lit?1.15:.7;ctx.setLineDash(e.practical?[]:[3,6]);ctx.beginPath();ctx.moveTo(p.a.x,p.a.y);ctx.quadraticCurveTo(p.c.x,p.c.y,p.b.x,p.b.y);ctx.stroke();
+ if(!reduced&&lit&&e.practical){const p2=point(p,(time*.065+e.a.phase*.11)%1);ctx.globalAlpha=.65;ctx.beginPath();ctx.arc(p2.x,p2.y,2.1,0,Math.PI*2);ctx.fillStyle='#e1ad25';ctx.fill()}}
+ ctx.setLineDash([]);
+ for(const n of [...shown].sort((a,b)=>(b.kind==='requirement')-(a.kind==='requirement'))){const p=screen(n),r=radius(n),c=color(n),lit=!near||near.has(n.id);ctx.globalAlpha=lit?1:.26;
+ if(n.kind==='requirement'){const glow=ctx.createRadialGradient(p.x,p.y,r,p.x,p.y,r+34);glow.addColorStop(0,n.status==='practical'?'#d7ae4c33':'#8d827317');glow.addColorStop(1,'#d7ae4c00');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(p.x,p.y,r+34,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(p.x,p.y,r+7,0,Math.PI*2);ctx.strokeStyle=n.id===(hover||focused)?'#57504a':'#514d4938';ctx.lineWidth=n.id===(hover||focused)?1.4:.8;ctx.stroke()}
+ ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fillStyle=c;ctx.fill();ctx.strokeStyle=n.kind==='requirement'?'#fffdf5':'#fff7e3';ctx.lineWidth=n.kind==='requirement'?2.8:.7;ctx.stroke();
+ if(!lit||n.kind!=='requirement'&&n.id!==(hover||focused))continue;ctx.font=(n.kind==='requirement'?'600 ':'')+(groups.length>12?'11':'13')+'px Arial';ctx.fillStyle='#27272b';const text=n.label.length>42?n.label.slice(0,39)+'…':n.label,w=ctx.measureText(text).width,tx=Math.max(10,Math.min(width-w-10,p.x-w/2));
+ for(const offset of [0,17,34,-53,51,68]){const ty=p.y+r+27+offset,rect={x:tx-3,y:ty-13,w:w+6,h:17};if(ty<98||ty>height-135||occupied.some(a=>rect.x<a.x+a.w&&rect.x+rect.w>a.x&&rect.y<a.y+a.h&&rect.y+rect.h>a.y))continue;occupied.push(rect);ctx.fillText(text,tx,ty);break}}
+ ctx.globalAlpha=1;
+ if(!nodes.length){ctx.fillStyle='#777064';ctx.font='14px Arial';ctx.fillText('В матрице нет требований',width/2-90,height/2)}}
+function step(){for(let i=0;i<nodes.length;i++){const a=nodes[i];for(let j=i+1;j<nodes.length;j++){const b=nodes[j],dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy+100,f=40/d2;a.vx+=dx*f*.04;a.vy+=dy*f*.04;b.vx-=dx*f*.04;b.vy-=dy*f*.04}}
+ for(const n of nodes){const a=anchors.get(n.group)||{x:0,y:0},spring=n.kind==='requirement'?.045:.005;n.vx=(n.vx+(a.x-n.x)*spring)*.76;n.vy=(n.vy+(a.y-n.y)*spring)*.76;if(n!==drag){n.x+=n.vx;n.y+=n.vy}}}
+function center(){const shown=visible(),xs=shown.map(n=>n.x),ys=shown.map(n=>n.y),minX=Math.min(...xs,-100),maxX=Math.max(...xs,100),minY=Math.min(...ys,-100),maxY=Math.max(...ys,100);scale=Math.max(.12,Math.min(1.25,(width-220)/(maxX-minX+90),(height-265)/(maxY-minY+80)));panX=-(minX+maxX)*scale/2;panY=-(minY+maxY)*scale/2;draw()}
+function resize(){width=box.clientWidth;height=box.clientHeight;const d=devicePixelRatio||1;canvas.width=width*d;canvas.height=height*d;ctx.setTransform(d,0,0,d,0,0);if(autoFit)center();else draw()}
+function animate(now){time=now/1000;if(energy>.01){step();energy*=.986;if(autoFit)center()}draw();frame=requestAnimationFrame(animate)}
+function zoom(f,x=width/2,y=height/2){autoFit=false;const old=scale;scale=Math.min(4,Math.max(.12,scale*f));panX=(panX+width/2-x)*scale/old+x-width/2;panY=(panY+height/2-y)*scale/old+y-height/2;draw()}
+function hit(x,y){return [...visible()].reverse().find(n=>{const p=screen(n);return Math.hypot(p.x-x,p.y-y)<radius(n)+6})}
+function choose(n){focused=n?.id||null;detail.textContent=n?n.label+(n.detail?'\n'+n.detail:''):'Выберите навык, чтобы раскрыть основания и фрагменты резюме · Перетаскивайте узлы · Масштабируйте колёсиком';draw()}
+canvas.addEventListener('pointerdown',e=>{autoFit=false;const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;drag=hit(x,y);last={x,y};moved=false;canvas.setPointerCapture(e.pointerId);energy=.4});
+canvas.addEventListener('pointermove',e=>{const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;if(last){const dx=x-last.x,dy=y-last.y;if(Math.abs(dx)+Math.abs(dy)>2)moved=true;if(drag){drag.x+=dx/scale;drag.y+=dy/scale;drag.vx=drag.vy=0}else{panX+=dx;panY+=dy}last={x,y}}else{hover=hit(x,y)?.id||null}draw()});
+canvas.addEventListener('pointerup',e=>{if(!moved){const r=canvas.getBoundingClientRect();choose(hit(e.clientX-r.left,e.clientY-r.top))}drag=last=null;draw()});canvas.addEventListener('pointercancel',()=>{drag=last=null});canvas.addEventListener('pointerleave',()=>{hover=null;draw()});
+canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();zoom(Math.exp(-e.deltaY*.001),e.clientX-r.left,e.clientY-r.top)},{passive:false});
+canvas.addEventListener('keydown',e=>{if(e.key==='Escape'){choose(null);return}if(!requirements.length)return;if(['ArrowRight','ArrowDown','ArrowLeft','ArrowUp'].includes(e.key)){e.preventDefault();keyIndex=(keyIndex+(['ArrowRight','ArrowDown'].includes(e.key)?1:-1)+requirements.length)%requirements.length;hover=requirements[keyIndex].id;draw()}if(e.key==='Enter'){e.preventDefault();choose(requirements[keyIndex])}});
+document.querySelector('#reset').onclick=()=>{autoFit=true;hover=null;choose(null);center()};document.querySelector('#plus').onclick=()=>zoom(1.2);document.querySelector('#minus').onclick=()=>zoom(1/1.2);document.querySelector('#associations').onchange=e=>{showAssociations=e.target.checked;draw()};
+new ResizeObserver(resize).observe(box);for(let i=0;i<100;i++)step();resize();if(!reduced)frame=requestAnimationFrame(animate);window.addEventListener('pagehide',()=>cancelAnimationFrame(frame));
+</script></html>

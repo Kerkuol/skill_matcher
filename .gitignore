@@ -4,3 +4,13 @@ data/
 tmp/
 __pycache__/
 *.pyc
+*.log
+output/
+
+# Publish the standalone prototype, not research caches and generated reports.
+experiments/*
+!experiments/graph_app/
+experiments/graph_app/baseline.json
+experiments/graph_app/explanations.py
+experiments/graph_app/graph.html
+experiments/graph_app/make_strong_resumes.py

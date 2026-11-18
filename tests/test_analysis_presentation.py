@@ -50,6 +50,7 @@ def display_comparative_analysis(*args):
 
 class ProcessingLifecycleTests(unittest.TestCase):
     def setUp(self):
+        (ROOT / "tmp").mkdir(parents=True, exist_ok=True)
         self.directory = tempfile.TemporaryDirectory(dir=ROOT / "tmp")
         self.addCleanup(self.directory.cleanup)
         patcher = patch.object(store, "DATABASE", Path(self.directory.name) / "matrices.sqlite3")

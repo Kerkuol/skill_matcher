@@ -1,4 +1,11 @@
 /* Warm glass layer: native Streamlit widgets retain their behavior and focus. */
+/* Align only the matrix selector row; other form layouts keep their spacing. */
+.element-container:has(.matrix-actions-anchor) { display: none; }
+[data-testid="stHorizontalBlock"]:has(.matrix-actions-anchor) { align-items: flex-end; }
+@media (max-width: 640px) {
+  [data-testid="stHorizontalBlock"]:has(.matrix-actions-anchor) > [data-testid="column"]:first-child,
+  [data-testid="stHorizontalBlock"]:has(.matrix-actions-anchor) > [data-testid="column"]:last-child { display: none; }
+}
 :root {
   --glass-surface: rgba(248, 245, 237, .72);
   --glass-edge: rgba(255, 255, 255, .86);

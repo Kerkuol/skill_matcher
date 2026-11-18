@@ -38,11 +38,7 @@ def extract_text_from_docx(file_content: bytes) -> str:
         if not file_content:
             raise ValueError("Получено пустое содержимое файла")
             
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp_file:
-            tmp_file.write(file_content)
-            tmp_file_path = tmp_file.name
-        
-        text = docx2txt.process(tmp_file_path)
+        text = docx2txt.process(io.BytesIO(file_content))
         if not text:
             raise ValueError("Не удалось извлечь текст из файла")
             

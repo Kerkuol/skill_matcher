@@ -22,6 +22,7 @@ from profiles import profiles as default_profiles
 from matrix_storage import load_matrices
 from matrix_editor import render_matrix_settings
 from navigation import render_navigation, render_landing, render_history, go_to, remember_uploads, clear_resumes, choose_active_matrix
+from skill_graph.scoring import ENGINE_REVISION
 st.session_state.setdefault("history", [])
 '''
 
